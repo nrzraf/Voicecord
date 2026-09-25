@@ -5,21 +5,19 @@ import sys
 import requests
 import websockets
 
-# Membaca dari Environment Variables (Railway/Cloud) jika ada,
-# Jika tidak ada, gunakan nilai default di bawah.
 TOKEN = os.getenv("DISCORD_TOKEN", "")
 GUILD_ID = os.getenv("GUILD_ID", "")
 CHANNEL_ID = os.getenv("CHANNEL_ID", "")
 
-STATUS = os.getenv("STATUS", "idle")  
-SELF_MUTE = os.getenv("SELF_MUTE", "true") 
-SELF_DEAF = os.getenv("SELF_DEAF", "true")
+STATUS = os.getenv("STATUS", "idle")
+SELF_MUTE = os.getenv("SELF_MUTE", "true").lower() == "true"
+SELF_DEAF = os.getenv("SELF_DEAF", "true").lower() == "true"
 
 API = "https://discord.com/api/v10"
 
 res = requests.get(f"{API}/users/@me", headers={"Authorization": TOKEN})
 if res.status_code != 200:
-    print("Invalid token! Periksa kembali token atau ganti token yang hangus.")
+    print("Invalid token! Periksa kembali token di Environment Variables.")
     sys.exit(1)
 
 user = res.json()
@@ -27,9 +25,12 @@ print(f"Logged in as {user['username']} ({user['id']})!")
 
 
 async def heartbeat(ws, interval):
-    while True:
-        await asyncio.sleep(interval / 1000)
-        await ws.send(json.dumps({"op": 1, "d": None}))
+    try:
+        while True:
+            await asyncio.sleep(interval / 1000)
+            await ws.send(json.dumps({"op": 1, "d": None}))
+    except Exception:
+        pass
 
 
 async def main():
@@ -39,8 +40,11 @@ async def main():
         hello = json.loads(await ws.recv())
         heartbeat_interval = hello["d"]["heartbeat_interval"]
 
-        asyncio.create_task(heartbeat(ws, heartbeat_interval))
+        heartbeat_task = asyncio.create_task(
+            heartbeat(ws, heartbeat_interval)
+        )
 
+        # Send Identify
         await ws.send(
             json.dumps(
                 {
@@ -58,11 +62,14 @@ async def main():
             )
         )
 
+        # Wait for READY event
         while True:
-            event = json.loads(await ws.recv())
+            msg = await ws.recv()
+            event = json.loads(msg)
             if event.get("t") == "READY":
                 break
 
+        # Send Voice State Update
         await ws.send(
             json.dumps(
                 {
@@ -79,12 +86,14 @@ async def main():
 
         print("Joined the voice channel!")
 
-        while True:
-            try:
-                msg = await ws.recv()
-            except Exception:
-                print("Disconnected, reconnecting...")
-                break
+        # Keep listening to socket until disconnected or closed
+        try:
+            while True:
+                await ws.recv()
+        except websockets.exceptions.ConnectionClosed as e:
+            print(f"WebSocket closed ({e.code}): Reconnecting in 5s...")
+        finally:
+            heartbeat_task.cancel()
 
 
 async def run():
@@ -92,8 +101,11 @@ async def run():
         try:
             await main()
         except Exception as e:
-            print("Error: ", e)
-            await asyncio.sleep(5)
+            print("Error/Disconnected:", e)
+
+        print("Attempting to reconnect in 5 seconds...")
+        await asyncio.sleep(5)
 
 
-asyncio.run(run())
+if __name__ == "__main__":
+    asyncio.run(run())
