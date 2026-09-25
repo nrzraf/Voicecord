@@ -11,9 +11,9 @@ TOKEN = os.getenv("DISCORD_TOKEN", "")
 GUILD_ID = os.getenv("GUILD_ID", "")
 CHANNEL_ID = os.getenv("CHANNEL_ID", "")
 
-STATUS = os.getenv("STATUS", "idle")  # online / dnd / idle
-SELF_MUTE = os.getenv("SELF_MUTE", "True").lower() == "true"
-SELF_DEAF = os.getenv("SELF_DEAF", "False").lower() == "true"
+STATUS = os.getenv("STATUS", "idle")  
+SELF_MUTE = os.getenv("SELF_MUTE", "true") 
+SELF_DEAF = os.getenv("SELF_DEAF", "true")
 
 API = "https://discord.com/api/v10"
 
